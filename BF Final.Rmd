@@ -1,0 +1,213 @@
+---
+title: "BF FInal"
+author: "Adrian Chan"
+date: "2024-12-09"
+output: html_document
+---
+
+```{r}
+library(fpp)
+library(fpp2)
+library(forecast)
+library(readr)
+total_sales<-read_csv("C:/Users/Adrian/Documents/Business Forecasting/TOTALSA.csv")
+head(total_sales)
+sales<-total_sales$`Sales Units(in Millions)`
+sales_ts<-ts(sales, start = c(2019,1), frequency = 12)
+plot(sales_ts)
+
+sales_cut<-window(sales_ts,start=c(2021,10),end=c(2024,2),frequency=12)
+head(sales_cut)
+plot(sales_cut, main="Car Sales", xlab="Year",ylab="Cars Sold")
+## The plot shows an upward trend with occasional dips and spikes in car sales in the U.S. at random months of the year. There also does not appear to be seasonality in this time series data. This data was taken after Covid began to die down.
+attributes(sales_cut)
+summary(sales_cut)
+
+boxplot(sales_cut, main="Car Sales")
+# The time series in the cut data varies from a minimum car sales of 13.17 million to a maximum of 16.45 million. The median is larger than the mean, which makes sense since the minimum was so low and the data shows a steady increase. The interquartile range is also 0.97 million cars sold.
+
+stl_decomp<-stl(sales_cut,s.window="periodic")
+plot(stl_decomp)
+# Using the decomposition plot, there is a clear pattern in the seasonal section of the plot. There are clear fluctuations that are regular and occur at consistent intervals (every 12 months).
+# The decomposition is additive because the seasonal and trend components remain relatively constant over time. The seasonal component does not change over time as the trend changes.
+
+seasonal_adjustment<-seasadj(stl_decomp)
+attributes(seasonal_adjustment)
+
+seasonal_component <- stl_decomp$time.series[, "seasonal"]
+seasonal_component
+
+monthly_indices<-tapply(seasonal_component, cycle(sales_cut), mean)
+monthly_indices
+max(monthly_indices)
+min(monthly_indices)
+# The value is high in April and low in December for the time series.
+# Car sales sees the high values in April because warmer weather encourage people to shop for cars for their summer trips along with dealership promotions to clear out old inventory. December sees low values because it is the month where people prioritize buying gifts and spending on travel, leaving less money to buy cars. Additionally, the bad weather discourages people from wanting to drive and people typically wait for post-holiday and New Year promotions the following year that help to clear out inventory.
+
+plot(sales_cut)
+lines(seasonal_adjustment,col='red')
+# From the plot, the seasonally adjusted time series (shown in red) pretty closely follows the line for the actual time series, suggesting that seasonality does not cause large fluctuations in the time series. While there is seasonality, it does not seem to impact the time series as much as the overall trend does.
+
+naive_forecast<-naive(sales_cut,12)
+plot(naive_forecast)
+
+plot.ts(naive_forecast$residuals,xy.labels=F,xy.lines=F)
+# This plot of residuals indicates that there is a better forecasting method that can be used to more accurately predict the number of cars sold in the U.S. and that it is only a benchmark. Since the residuals in this plot sees a wide range, a different forecasting method would provide a better performance.
+
+hist(naive_forecast$residuals)
+# From the histogram of residuals, it is clear that it is roughly centered at 0. This suggests that the naive forecast does not have a systematic bias. The histogram also appears to have a roughly symmetric (normal distribution) shape, but is slightly skewed toward negative residuals, indicating that it may occasionally overestimate values. Its large range indicates that the model may struggle to capture some significant variations in the data and that the outliers all the way to the right may indicate large errors in specific time periods where there are spikes in the time series. A better forecasting model can be used.
+
+plot.ts(naive_forecast$fitted,naive_forecast$residuals,xy.labels=F,xy.lines=F)
+# This plot indicates that the residuals are randomly scattered with no clear pattern but that there are many outliers since many of the residuals are far from 0
+
+plot.ts(sales_cut,naive_forecast$residuals,xy.labels=F,xy.lines=F)
+# The plot of actual values vs the residuals also appears to be random but since there are also large outliers with the residuals being far from 0, a better forecasting method can be utilized.
+
+Acf(naive_forecast$residuals)
+# In the ACF plot, while most of the lags are within the significance bounds, there are still some that are out of them, indicating a statistically significant autocorrelation at those lags. However, they do appear to be random with no clear pattern indicating that there is no autocorrelation between the lags. This model has not captured all the dependencies in the data, meaning there are patterns the naive model failed to account for and that a better forecasting model can be used.
+
+accuracy(naive_forecast)
+
+forecast(naive_forecast,12)
+plot(naive_forecast,12)
+#This forecasting technique is not completely accurate, and is a benchmark from which to compare other forecasting methods to. It does not take into consideration the seasonal aspect of the data and only predicts the next year's car sales based on the previous month's data. Its RMSE is 0.6980069 and forecasts next year's car sales will be 16.191 million. This was the forecasted value for the next 12 months.
+
+MA_forecast<-ma(sales_cut,order=T)
+MA3_forecast<-ma(sales_cut,order=3)
+MA6_forecast<-ma(sales_cut,order=6)
+MA9_forecast<-ma(sales_cut,order=9)
+
+plot(MA_forecast)
+lines(MA3_forecast,col='red')
+lines(MA6_forecast,col='blue')
+lines(MA9_forecast,col='green')
+# As the plot of the moving average order goes up, the seasonality of the data seems to decrease, and only represents the trend in the data. The lower the order, the better the forecast seems to be for the data.
+
+forecast(MA3_forecast,12)
+# I chose this simple average order because order 3 took seasonality into account the most.
+
+SSE_Simple<-ets(sales_cut)
+summary(SSE_Simple)
+forecast(SSE_Simple,12)
+# An alpha of 0.5347 indicates that the model places a little more than half the weight on the most recent observations and that past observations have almost the same amount of influence on the forecast. The value of the initial states is 13.3922.
+
+#The sigma value of 0.6257 signifies that the typical error between the actual and predicted values is about 0.6257 million cars sold.
+
+plot.ts(SSE_Simple$residuals,xy.labels=F,xy.lines=F)
+#This residual plot is somewhat similar to the one from the naive forecast. Since the Simple Exponential Smoothing method does not take into consideration the trend or seasonality and the residuals appear to be quite large, there are better forecasting methods that can be used. 
+
+hist(SSE_Simple$residuals)
+# This histogram of residuals is also very similar to that from the naive forecasting method. It is clear that it is roughly centered at 0. This suggests that the simple exponential smoothing forecast does not have a systematic bias. The histogram also appears to have a roughly symmetric (normal distribution) shape, but is slightly skewed toward negative residuals, indicating that it may occasionally overestimate values. Its large range indicates that the model may struggle to capture some significant variations in the data and that the outliers all the way to the right may indicate large errors in specific time periods where there are spikes in the time series. A better forecasting model can be used.
+
+plot.ts(SSE_Simple$fitted,SSE_Simple$residuals,xy.labels=F,xy.lines=F)
+#This plot of fitted values vs residuals is also very similar to that from the naive forecast. This plot indicates that the residuals are randomly scattered with no clear pattern but that there are many outliers since many of the residuals are far from 0. Again, more advanced forecasting method should be used.
+
+plot.ts(sales_cut,SSE_Simple$residuals,xy.labels=F,xy.lines=F)
+# This plot is also very similar to the one from the naive forecasting method. Again, the plot of actual values vs the residuals appears to be random but since there are also large outliers with the residuals being far from 0, a better forecasting method can be utilized.
+
+Acf(SSE_Simple$residuals)
+#Again, this is very similar to the ACF plot from the naive forecast. While most of the lags are within the significance bounds, there is still one that is out of them, indicating a statistically significant autocorrelation at that lag. However, they do appear to be random with no clear pattern indicating that there is no autocorrelation between the lags. This model has not captured all the dependencies in the data, meaning there are patterns the simple exponential smoothing model failed to account for and that a better forecasting model can be used.
+
+accuracy(SSE_Simple)
+
+plot(forecast(SSE_Simple,12))
+forecast(SSE_Simple,12)
+#This forecasting technique is a little more accurate than the naive forecast. However, it does not take into consideration the seasonal nor trend aspect of the data and only predicts the next year's ridership based on the previous month's data. Its RMSE is 0.6037203, which is only slightly better than the naive method and forecasts next year's car sales will be 16.02064 million. This was the forecasted value for the next 12 months.
+
+HW_model<-HoltWinters(sales_cut)
+print(HW_model)
+plot(HW_model)
+HW_forecast<-forecast(HW_model)
+HW_forecast
+# The alpha value of 0.4552278 signifies that the model is applying moderate smoothing to the level of the series. It is somewhat sensitive to recent changes in the data, but still considers historical data to smooth out random fluctuations.
+# The beta value of 0 signifies that the model is not placing any of the weight on the most recent trend estimate and all the weight on the historical trend. This value suggest that the model is relatively slow to adapt to the changes in the trend over time. However, since the trend of the data is changing slowly over time, the low beta helps maintain smooth trend adjustments
+# The gamma value of 0 signifies that the seasonal component of the model is not updated over time. This value means the model assumes that the seasonal pattern will remain constant and will not adapt to changes to seasonality over time. It is based on historical data but remains the same throughout the forecasting period.
+# The initial states for the level is 16.06076315 signifying the starting point of the time series. The initial trend of 0.14408756 signifies that the series has a slight upward trend, with values increasing by approximately 0.14408756 million per time period. The initial state for seasonality of 0.24798264 signifies that the first month of the forecast is higher than the base level.
+
+plot.ts(HW_forecast$residuals,xy.labels=F,xy.lines=F)
+# This plot shows the residuals appearing to fluctuate around 0, indicating no large systemic bias in the forecast. The residuals also vary in magnitudes. Toward the later part of the time series (2023 and onward), the residuals become more volatile, deviating further from zero. This could indicate that the model is struggling to capture some of the seasonality and trend in the data. However, the plot does not appear to have a pattern. There are also some large residuals which could be outliers in the data.
+
+hist(HW_forecast$residuals)
+# The residuals of this plot are centered approximately around zero, indicating the model does not over or underestimate the actual values. It also appears slightly skewed to positive values, indicating the residuals may underestimate the actual values. Since there do not appear to be significant outliers, there does not seem to be any large errors.
+
+plot.ts(HW_forecast$fitted,HW_forecast$residuals,xy.labels=F,xy.lines=F)
+# This plot of fitted values vs residuals is slightly different from that of simple smoothing and naive. While most of the residuals are centered around 0, this plot indicates that the residuals are randomly scattered with no clear pattern but that there are some outliers since some of the residuals are far from 0. Again, more advanced forecasting methods should be used.
+
+plot.ts(sales_cut,HW_forecast$residuals,xy.labels=F,xy.lines=F)
+# This of actual values vs residuals is very different from the previous methods. This plot shows that most of the residuals are apparent more as the number of car sales goes up. This plot also shows that the residuals are randomly scattered with no clear pattern but that there are many outliers since many of the residuals are a good distance from 0. Again, more advanced forecasting method should be used.
+
+Acf(HW_forecast$residuals)
+# The ACF plot contains no lags outside of the significance bounds. This indicates that the residuals are random and uncorrelated and that the model adequately explains the patterns in the data and that the residuals are independent over time, meaning no autocorrelation. This indicates that the Holt-Winters method can be used to forecast car sales.
+accuracy(HW_forecast)
+HW_forecast<-forecast(HW_model,12)
+HW_forecast
+plot(HW_forecast)
+# This forecasting method is more accurate than the naive forecast but not the simple smoothing method. It has an RMSE of 0.7502899. In one year, the Holt-Winters method forecasts the value of the time series to be 17.96638 million cars sold.
+
+ndiffs(sales_cut)
+# The time series is not stationary because this code measures the number of differences required to transform the data into a stationary series. Since the output of this is not 0, it means it is not stationary
+# The code states that there is only 1 difference needed to make the time series stationary
+
+nsdiffs((diff(sales_cut,12)))
+# Since this code returns 0, it means that the times series does not need additional seasonal differencing to remove seasonal patterns.
+
+tsdisplay(diff(diff(sales_cut,12)))
+# Based on the ACF nd PACF, the possible ARIMA model is ARIMA(3,1,0)
+
+fit<-auto.arima(sales_cut,trace=T,stepwise=F)
+fit
+# The best model according to the code is ARIMA(3,1,0).
+
+attributes(fit)
+
+plot.ts(residuals(fit))
+# In this ARIMA residuals plot, it appears that there are no clear trends in the residuals with some spikes and dips, which may not be accounting for factors such as outliers.
+hist(fit$residuals)
+# The residuals of this plot are centered approximately around zero, but is skewed to positive values, indicating the residuals may be underestimating the actual values. There does appear to be 1 significant outlier, indicating a large error in the forecast. 
+
+plot.ts(fit$fitted,fit$residuals,xy.labels=F,xy.lines=F)
+# This fitted vs residuals plot shows that the residuals are centered roughly at 0, but there are some outliers. While most of the residuals are centered around 0, this plot indicates that the residuals are randomly scattered with no clear pattern but that there are some outliers since some of the residuals are far from 0.
+
+plot.ts(sales_cut,fit$residuals,xy.labels=F,xy.lines=F)
+# This plot is similar to the fittev vs residuals plot in that it is centered roughly at 0, but there do appear to be some positive and negative outliers. This plot does appear to have random residuals and are scattered, showing no pattern. 
+
+Acf(fit$residuals)
+# This ACF plot shows no lags outside the significance bounds, meaning the model has captured most of the autocorrelation. This model could be considered when forecasting car sales
+
+accuracy(fit)
+
+plot(sales_cut,main="ARIMA Historical")
+lines(fit$fitted,col='red')
+
+forecast(fit,h=12,level=c(99.5))
+plot(forecast(fit,h=12,level=c(99.5)))
+
+forecast(fit,h=24,level=c(99.5))
+plot(forecast(fit,h=24,level=c(99.5)))
+
+#This forecasting model is actually more accurate than all the other models since its RMSE is only 0.5259604. In one year, it predicts that the car sales will be 16.03272 million and in 2 years will be 16.00080 million. 
+
+accuracy_naive<-accuracy(naive_forecast)
+accuracy_SSE<-accuracy(SSE_Simple)
+accuracy_HW<-accuracy(HW_forecast)
+accuracy_ARIMA<-accuracy(fit)
+
+accuracy_table<-rbind(Naive=accuracy_naive[1,],SSE=accuracy_SSE[1,],Holt_Winters=accuracy_HW[1,],ARIMA=accuracy_ARIMA[1,])
+
+print(accuracy_table)
+
+#Best forecast method with RMSE: ARIMA
+#Worst forecast method with RMSE: Holt-Winters
+#I chose this accuracy measure because I wanted an error metric that was easy to interpret, the data contained units (in millions of dollars), penalizes large errors more heavily, and is not as sensitive to small errors.
+
+# Over the time period selected, there was a gradual incline in car sales after October 2021 with clear seasonality. I think that in the next year, the data will slightly increase following the data and will do the same the next 2 years taking seasonality into account.
+
+# Ranking based on historical values:
+# 1. ARIMA
+# 2. SSE
+# 3. Naive
+# 4. Holt-Winters
+# 5. Moving Average
+
+```
+
